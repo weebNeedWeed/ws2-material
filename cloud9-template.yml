@@ -1,0 +1,273 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: A template for provisioning a Cloud9 environment
+
+Parameters:
+  WorkshopInstanceType:
+    Description: Workshop Cloud9 instance type - Constrained AZs in a region could cause deployment failure for certain instance types
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+      - t3.medium
+    ConstraintDescription: Must be a valid Cloud9 instance type
+  WorkshopInstanceVolumeSize:
+    Type: Number
+    Description: The Size in GB of the Cloud9 Instance Volume.
+    Default: 50
+
+Resources:
+  ########## Permissions and Roles ##########
+  WorkshopC9Role:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: CfnWorkshop
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - ssm.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Path: "/"
+
+  WorkshopC9LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: CfnWorkshop
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: !Sub WorkshopC9LambdaPolicy-${AWS::Region}
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                  - ec2:DescribeInstances
+                  - ec2:AssociateIamInstanceProfile
+                  - ec2:ModifyInstanceAttribute
+                  - ec2:ReplaceIamInstanceProfileAssociation
+                  - ec2:RebootInstances
+                  - iam:ListInstanceProfiles
+                  - iam:PassRole
+                Resource: "*"
+
+  ########## Instances ##########
+  WorkshopC9InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref WorkshopC9Role
+
+  WorkshopC9Instance:
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      Description: AWS Cloud9 instance for Workshops
+      AutomaticStopTimeMinutes: 30
+      ImageId: amazonlinux-2023-x86_64
+      InstanceType:
+        Ref: WorkshopInstanceType
+      Name: AWS-Cfn-Workshop
+      Tags:
+        - Key: Environment
+          Value: CfnWorkshop
+
+  ########## Lambda Bootstrap Function ##########
+  WorkshopC9BootstrapInstanceLambda:
+    Description: Bootstrap Cloud9 instance
+    Type: Custom::WorkshopC9BootstrapInstanceLambda
+    DependsOn:
+      - WorkshopC9BootstrapInstanceLambdaFunction
+      - WorkshopC9Instance
+      - WorkshopC9InstanceProfile
+      - WorkshopC9LambdaExecutionRole
+      - WorkshopOutputBucket
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: CfnWorkshop
+      ServiceToken:
+        Fn::GetAtt:
+          - WorkshopC9BootstrapInstanceLambdaFunction
+          - Arn
+      REGION:
+        Ref: AWS::Region
+      StackName:
+        Ref: AWS::StackName
+      EnvironmentId:
+        Ref: WorkshopC9Instance
+      LabIdeInstanceProfileName:
+        Ref: WorkshopC9InstanceProfile
+      LabIdeInstanceProfileArn:
+        Fn::GetAtt:
+          - WorkshopC9InstanceProfile
+          - Arn
+      WorkshopBucketId: !Ref WorkshopOutputBucket
+
+  WorkshopC9BootstrapInstanceLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: CfnWorkshop
+      Handler: index.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - WorkshopC9LambdaExecutionRole
+          - Arn
+      Runtime: python3.9
+      MemorySize: 256
+      Timeout: "600"
+      Code:
+        ZipFile: |
+          import boto3
+          import traceback
+          import cfnresponse
+
+          import logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def lambda_handler(event, context):
+            try:
+              logger.info('event: {}'.format(event))
+
+              # Steps to do on Cloudformation Delete Request
+              if event['RequestType'] == 'Delete':
+                logger.info('Received Delete Request')
+
+                # Empty SSM output bucket on deletion of stack
+                bucket = event['ResourceProperties']['WorkshopBucketId']
+                logger.info('Deleting contents of ' + bucket)
+
+                s3 = boto3.resource('s3')
+                bucket = s3.Bucket(bucket)
+                for obj in bucket.objects.filter():
+                  s3.Object(bucket.name, obj.key).delete()
+
+              # Steps to do on Cloudformation Update requests
+              if event['RequestType'] == 'Update':
+                logger.info('Received Update Request')
+
+              # Steps to do on Cloudformation Create requests
+              if event['RequestType'] == 'Create':
+                # Open AWS clients
+                ec2 = boto3.client('ec2')
+
+                # Get ec2.instancesCollection Information of the Cloud9 IDE Environment
+                instances = boto3.resource('ec2').instances.filter(Filters=[{'Name': 'tag:Name','Values': ['*' + event['ResourceProperties']['EnvironmentId']]}])
+
+                # Create the IamInstanceProfile request object
+                iam_instance_profile = {
+                    'Arn': event['ResourceProperties']['LabIdeInstanceProfileArn'],
+                    'Name': event['ResourceProperties']['LabIdeInstanceProfileName']
+                }
+
+                # attach instance profile
+                for instance in instances:
+                  response = ec2.associate_iam_instance_profile(IamInstanceProfile=iam_instance_profile, InstanceId=instance.id)
+                  logger.info('Received Create Request - Completed for : ' + instance.id)
+
+            # Catch any exceptions
+            except Exception as e:
+                logger.error(e)
+                traceback.format_exc()
+
+            # Always respond back to Cloudformation so it isn't in excessive pending state
+            finally:
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+  ########## Bootstraping ##########
+  WorkshopC9SSMDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: CfnWorkshop
+      DocumentType: Command
+      DocumentFormat: YAML
+      Content:
+        schemaVersion: "2.2"
+        description: Bootstrap Cloud9 Instance
+        mainSteps:
+          - action: aws:runShellScript
+            name: WorkshopC9bootstrap
+            inputs:
+              runCommand:
+                - "#!/bin/bash"
+                - date
+                - echo LANG=en_US.utf-8 >> /etc/environment
+                - echo LC_ALL=en_US.UTF-8 >> /etc/environment
+                - . /home/ec2-user/.bashrc
+                # setup aws cli
+                - echo '=== INSTALL and CONFIGURE default software components ==='
+                - yum -y remove awscli; yum -y install jq
+                - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                - unzip awscliv2.zip
+                - ./aws/install
+                # setup workshop material
+                - su - ec2-user -c "cd /home/ec2-user/environment ; git clone https://github.com/aws-samples/cfn101-workshop"
+
+  WorkshopOutputBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+
+  WorkshopC9BootstrapAssociation:
+    Type: AWS::SSM::Association
+    DependsOn:
+      - WorkshopOutputBucket
+      - WorkshopC9Instance
+      - WorkshopC9BootstrapInstanceLambda
+    Properties:
+      Name: !Ref WorkshopC9SSMDocument
+      OutputLocation:
+        S3Location:
+          OutputS3BucketName: !Ref WorkshopOutputBucket
+          OutputS3KeyPrefix: bootstrapoutput
+      Targets:
+        - Key: tag:aws:cloud9:environment
+          Values:
+            - !Ref WorkshopC9Instance
+
+Outputs:
+  Cloud9IDE:
+    Value:
+      Fn::Join:
+        - ""
+        - - https://
+          - Ref: AWS::Region
+          - ".console.aws.amazon.com/cloud9/ide/"
+          - Ref: WorkshopC9Instance
+          - "?region="
+          - Ref: AWS::Region
