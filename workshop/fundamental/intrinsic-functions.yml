@@ -22,13 +22,13 @@ Parameters:
       - m1.small
       - m1.large
     Description: Enter t2.micro, m1.small, or m1.large. Default is t2.micro.
-# Add ImageId parameter
+  # Add ImageId parameter
 
    
 Resources:
-# Add some property to your instance
   WebServerInstance:
     Type: 'AWS::EC2::Instance'
     Properties:
+			# Add some property to your instance
       InstanceType: !Ref InstanceType
       ImageId: ami-0b287aaaab87c114d
