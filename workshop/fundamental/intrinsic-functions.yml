@@ -26,6 +26,7 @@ Parameters:
 
    
 Resources:
+# Add some property to your instance
   WebServerInstance:
     Type: 'AWS::EC2::Instance'
     Properties:
