@@ -28,7 +28,6 @@ Parameters:
 Resources:
   WebServerInstance:
     Type: 'AWS::EC2::Instance'
-    Properties:
-			# Add some property to your instance
+    Properties: # Edit EC2 instance properties
       InstanceType: !Ref InstanceType
       ImageId: ami-0b287aaaab87c114d
