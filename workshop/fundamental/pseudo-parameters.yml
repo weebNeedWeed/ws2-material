@@ -1,0 +1,7 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Pseudo parameters demo
+
+# Add the Parameters section
+
+# Add the Resources section
