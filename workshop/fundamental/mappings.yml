@@ -18,5 +18,5 @@ Resources:
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0ff8a91507f77f867
+      ImageId: ami-0b287aaaab87c114d
       InstanceType: t2.micro # Replace it
