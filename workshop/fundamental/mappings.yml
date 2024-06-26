@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Mappings demo
+
+Parameters:
+  EnvironmentType:
+    Description: 'Specify the Environment type of the stack.'
+    Type: String
+    Default: Test
+    AllowedValues:
+      - Test
+      - Prod
+    ConstraintDescription: 'Specify either Test or Prod.'
+    
+# Declare the Mappings
+
+Resources:
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0ff8a91507f77f867
+      InstanceType: t2.micro # Replace it
