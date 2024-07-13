@@ -1,0 +1,16 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Multi region latest AMI demo
+
+Parameters:
+  AmiID:
+    Type: AWS::EC2::Image::Id # Replace this with SSM parameter type
+    Description: 'The ID of the AMI.'
+    Default: '' # Provide an Amazon Linux AMI alias
+
+Resources:
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiID
+      InstanceType: t2.micro
