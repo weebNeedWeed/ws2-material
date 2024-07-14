@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Multi region latest AMI demo
+
+Parameters:
+  AmiID:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: The ID of the AMI.
+    Default: '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64'
+
+Resources:
+# Add the IAM Role and IAM Instance Profile
+
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      # Reference to IAM Instance Profile
+      ImageId: !Ref AmiID
+      InstanceType: t2.micro
+  
+  WebServerEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref WebServerInstance
