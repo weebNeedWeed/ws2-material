@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
-Description: Multi region latest AMI demo
+Description: Session Manager demo
 
 Parameters:
   AmiID:
