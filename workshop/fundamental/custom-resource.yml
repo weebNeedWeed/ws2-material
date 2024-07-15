@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Custom Resource demo
+
+# Declare the Parameters
+Parameters:
+  OwnerName:
+    
+  RepoName:
+    
+  GithubPAT:
+    
+Resources:
+  LambdaExecutionRole:
+    # Add resource's attributes to the role
+  
+  GithubRepo:
+    # Add resource's attributes to the custom resource
+    
+  CreateRepoFunction:
+    # Add resource's attributes to the function
