@@ -14,8 +14,8 @@ Resources:
   LambdaExecutionRole:
     # Add resource's attributes to the role
   
-  GithubRepo:
-    # Add resource's attributes to the custom resource
-    
   CreateRepoFunction:
     # Add resource's attributes to the function
+  
+  GithubRepo:
+    # Add resource's attributes to the custom resource
